@@ -140,6 +140,7 @@ $(OUT)/test_sifive_u: ${TEST_SIFIVE_U_DEPS}
 $(OUT)/user_sifive_u: ${USER_SIFIVE_U_DEPS}
 	$(RISCV64_GCC) -march=rv64g -mabi=lp64 $(GCC_FLAGS) \
 		-Wa,--defsym,NUM_HARTS=2 \
+		-g \
 		-include include/machine/qemu.h \
 		${USER_SIFIVE_U_DEPS} -o $@
 
