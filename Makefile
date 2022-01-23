@@ -70,7 +70,7 @@ USER_DEPS = src/boot.s src/baremetal-print.s \
 			src/baremetal-poweroff.s src/userland.c src/kernel.c src/syscalls.c \
 			src/pmp.c src/riscv.c src/fdt.c src/string.c src/proc_test.c \
 			src/spinlock.c src/proc.c src/usyscalls.s src/context.s \
-			src/pagealloc.c
+			src/pagealloc.c src/uart.c
 TEST_SIFIVE_U_DEPS = $(TEST_DEPS)
 USER_SIFIVE_U_DEPS = $(USER_DEPS)
 TEST_SIFIVE_E_DEPS = $(TEST_DEPS)
@@ -272,6 +272,7 @@ prereqs:
 		libmpfr-dev \
 		libtool \
 		patchutils \
+		picocom \
 		pkg-config \
 		texinfo gperf \
 		wget \
