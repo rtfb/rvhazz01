@@ -184,6 +184,7 @@ $(OUT)/user_sifive_e32: ${USER_SIFIVE_E32_DEPS}
 	$(RISCV64_GCC) -march=rv32g -mabi=ilp32 $(GCC_FLAGS) \
 		-Wl,--defsym,ROM_START=0x20400000 -Wa,--defsym,UART=0x10013000 \
 		-Wa,--defsym,XLEN=32 \
+		-g \
 		-Wa,--defsym,NUM_HARTS=1 \
 		-include include/machine/qemu.h \
 		${USER_SIFIVE_E32_DEPS} -o $@
