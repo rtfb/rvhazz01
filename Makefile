@@ -162,6 +162,7 @@ $(OUT)/test_sifive_e: ${TEST_SIFIVE_E_DEPS}
 	$(RISCV64_GCC) -march=rv64g -mabi=lp64 $(GCC_FLAGS) \
 		-Wl,--defsym,ROM_START=0x20400000 -Wa,--defsym,UART=0x10013000 \
 		-Wa,--defsym,NUM_HARTS=1 \
+		-D UART_BASE=0x10013000 \
 		-include include/machine/qemu.h \
 		${TEST_SIFIVE_E_DEPS} -o $@
 
@@ -169,6 +170,7 @@ $(OUT)/user_sifive_e: ${USER_SIFIVE_E_DEPS}
 	$(RISCV64_GCC) -march=rv64g -mabi=lp64 $(GCC_FLAGS) \
 		-Wl,--defsym,ROM_START=0x20400000 -Wa,--defsym,UART=0x10013000 \
 		-Wa,--defsym,NUM_HARTS=1 \
+		-D UART_BASE=0x10013000 \
 		-include include/machine/qemu.h \
 		${USER_SIFIVE_E_DEPS} -o $@
 
@@ -177,6 +179,7 @@ $(OUT)/test_sifive_e32: ${TEST_SIFIVE_E32_DEPS}
 		-Wl,--defsym,ROM_START=0x20400000 -Wa,--defsym,UART=0x10013000 \
 		-Wa,--defsym,XLEN=32 \
 		-Wa,--defsym,NUM_HARTS=1 \
+		-D UART_BASE=0x10013000 \
 		-include include/machine/qemu.h \
 		${TEST_SIFIVE_E32_DEPS} -o $@
 
@@ -187,12 +190,14 @@ $(OUT)/user_sifive_e32: ${USER_SIFIVE_E32_DEPS}
 		-Wl,--defsym,RAM_SIZE=0x4000 \
 		-g \
 		-Wa,--defsym,NUM_HARTS=1 \
+		-D UART_BASE=0x10013000 \
 		-include include/machine/qemu.h \
 		${USER_SIFIVE_E32_DEPS} -o $@
 
 $(OUT)/test_virt: ${TEST_VIRT_DEPS}
 	$(RISCV64_GCC) -march=rv64g -mabi=lp64 $(GCC_FLAGS) \
 		-Wa,--defsym,UART=0x10000000 -Wa,--defsym,QEMU_EXIT=0x100000 \
+		-D UART_BASE=0x10000000 \
 		-include include/machine/qemu.h \
 		${TEST_VIRT_DEPS} -o $@
 
@@ -200,6 +205,7 @@ $(OUT)/user_virt: ${USER_VIRT_DEPS}
 	$(RISCV64_GCC) -march=rv64g -mabi=lp64 $(GCC_FLAGS) \
 		-Wa,--defsym,UART=0x10000000 -Wa,--defsym,QEMU_EXIT=0x100000 \
 		-Wa,--defsym,NUM_HARTS=1 \
+		-D UART_BASE=0x10000000 \
 		-include include/machine/qemu.h \
 		${USER_VIRT_DEPS} -o $@
 
@@ -208,6 +214,7 @@ $(OUT)/user_hifive1_revb: ${USER_SIFIVE_E32_DEPS}
 		-Wl,--defsym,ROM_START=0x20010000 -Wa,--defsym,UART=0x10013000 \
 		-Wa,--defsym,XLEN=32 -Wa,--defsym,NO_S_MODE=1 -Wa,--defsym,NUM_HARTS=1 \
 		-Wl,--defsym,RAM_SIZE=0x4000 \
+		-D UART_BASE=0x10013000 \
 		-include include/machine/hifive1-revb.h \
 		${USER_SIFIVE_E32_DEPS} -o $@
 
