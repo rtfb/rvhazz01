@@ -82,24 +82,6 @@ USER_SIFIVE_U32_DEPS = $(USER_DEPS)
 TEST_VIRT_DEPS = $(TEST_DEPS)
 USER_VIRT_DEPS = $(USER_DEPS)
 
-.PHONY: test
-test: $(OUT)/test-output.txt
-	@diff -u testdata/want-output.txt $<
-	@echo "OK"
-
-$(OUT)/test-output.txt: $(OUT)/test_virt
-	@$(QEMU_LAUNCHER) --machine=virt --binary=$< > $@
-
-$(OUT)/test-output-u64.txt: $(OUT)/user_sifive_u
-	@$(QEMU_LAUNCHER) --bootargs dry-run --timeout=5s --binary=$< > $@
-	@diff -u testdata/want-output-u64.txt $@
-	@echo "OK"
-
-$(OUT)/test-output-u32.txt: $(OUT)/user_sifive_u32
-	@$(QEMU_LAUNCHER) --bootargs dry-run --timeout=5s --binary=$< > $@
-	@diff -u testdata/want-output-u32.txt $@
-	@echo "OK"
-
 .PHONY: run-baremetal
 run-baremetal: $(OUT)/user_sifive_u
 	$(QEMU_LAUNCHER) --binary=$<
@@ -155,6 +137,7 @@ $(OUT)/user_sifive_u32: ${USER_SIFIVE_U32_DEPS}
 	$(RISCV64_GCC) -march=rv32g -mabi=ilp32 $(GCC_FLAGS) \
 		-Wa,--defsym,XLEN=32 \
 		-Wa,--defsym,NUM_HARTS=2 \
+		-g \
 		-include include/machine/qemu.h \
 		${USER_SIFIVE_U32_DEPS} -o $@
 
@@ -217,6 +200,34 @@ $(OUT)/user_hifive1_revb: ${USER_SIFIVE_E32_DEPS}
 		-D UART_BASE=0x10013000 \
 		-include include/machine/hifive1-revb.h \
 		${USER_SIFIVE_E32_DEPS} -o $@
+
+.PHONY: test
+test: $(OUT)/test-output.txt
+	@diff -u testdata/want-output.txt $<
+	@echo "OK"
+
+$(OUT)/test-output.txt: $(OUT)/test_virt
+	@$(QEMU_LAUNCHER) --machine=virt --binary=$< > $@
+
+$(OUT)/test-output-u64.txt: $(OUT)/user_sifive_u
+	@$(QEMU_LAUNCHER) --bootargs dry-run --timeout=5s --binary=$< > $@
+	@diff -u testdata/want-output-u64.txt $@
+	@echo "OK"
+
+$(OUT)/test-output-u32.txt: $(OUT)/user_sifive_u32
+	@$(QEMU_LAUNCHER) --bootargs dry-run --timeout=5s --binary=$< > $@
+	@diff -u testdata/want-output-u32.txt $@
+	@echo "OK"
+
+$(OUT)/smoke-test-output-u32.txt: $(OUT)/user_sifive_u32
+	@$(QEMU_LAUNCHER) --bootargs smoke-test --timeout=5s --binary=$< > $@
+	@diff -u testdata/want-smoke-test-output-u32.txt $@
+	@echo "OK"
+
+$(OUT)/smoke-test-output-u64.txt: $(OUT)/user_sifive_u
+	@$(QEMU_LAUNCHER) --bootargs smoke-test --timeout=5s --binary=$< > $@
+	@diff -u testdata/want-smoke-test-output-u64.txt $@
+	@echo "OK"
 
 $(OUT):
 	mkdir -p $(OUT)
