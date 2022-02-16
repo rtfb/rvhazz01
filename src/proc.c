@@ -151,6 +151,7 @@ uint32_t proc_fork() {
     child->stack_page = sp;
     copy_page(child->stack_page, parent->stack_page);
     copy_context(&child->context, &parent->context);
+    copy_files(child, parent);
 
     // overwrite the sp with the same offset as parent->sp, but within the child stack:
     regsize_t offset = parent->context.regs[REG_SP] - (regsize_t)parent->stack_page;
@@ -163,6 +164,16 @@ uint32_t proc_fork() {
     release(&child->lock);
     trap_frame.regs[REG_A0] = child->pid;
     return child->pid;
+}
+
+void copy_files(process_t *dst, process_t *src) {
+    for (int i = 0; i < MAX_PROC_FDS; i++) {
+        file_t *pf = src->files[i];
+        if (pf) {
+            pf->refcount++;
+        }
+        dst->files[i] = pf;
+    }
 }
 
 regsize_t len_argv(char const* argv[]) {
@@ -292,6 +303,7 @@ process_t* init_proc(process_t* proc) {
 process_t* current_proc() {
     acquire(&proc_table.lock);
     if (proc_table.num_procs == 0) {
+        release(&proc_table.lock);
         return 0;
     }
     process_t* proc = &proc_table.procs[proc_table.curr_proc];
@@ -345,10 +357,29 @@ int32_t proc_wait() {
     return wait_or_sleep(0);
 }
 
+extern void ret_to_user();  // implemented in context.s
+void proc_yield() {
+    wait_or_sleep(0);
+    ret_to_user();
+}
+
 int32_t proc_sleep(uint64_t milliseconds) {
     uint64_t now = time_get_now();
     uint64_t delta = (ONE_SECOND/1000)*milliseconds;
     return wait_or_sleep(now + delta);
+}
+
+void proc_mark_for_wakeup(uint64_t pid) {
+    acquire(&proc_table.lock);
+    if (proc_table.num_procs == 0) {
+        release(&proc_table.lock);
+        return;
+    }
+    process_t* proc = &proc_table.procs[pid];
+    acquire(&proc->lock);
+    release(&proc_table.lock);
+    proc->state = PROC_STATE_READY;
+    release(&proc->lock);
 }
 
 uint32_t proc_plist(uint32_t *pids, uint32_t size) {
@@ -443,6 +474,19 @@ int32_t proc_read(uint32_t fd, void *buf, uint32_t size) {
     return fs_read(f, f->position, buf, size);
 }
 
+int32_t proc_write(uint32_t fd, void *buf, uint32_t nbytes) {
+    process_t* proc = myproc();
+    acquire(&proc->lock);
+    file_t *f = proc->files[fd];
+    release(&proc->lock);
+    if (f == 0) {
+        // Writing a non-open file. TODO: set errno
+        return -1;
+    }
+    int32_t status = fs_write(f, f->position, buf, nbytes);
+    return status;
+}
+
 int32_t proc_close(uint32_t fd) {
     if (fd <= FD_STDERR) {
         // Can't (yet?) close one of std* fds. TODO: set errno to something useful
@@ -460,4 +504,16 @@ int32_t proc_close(uint32_t fd) {
     fs_free_file(f);
     fd_free(proc, fd);
     release(&proc->lock);
+}
+
+process_t* find_proc(uint32_t pid) {
+    acquire(&proc_table.lock);
+    for (int i = 0; i < MAX_PROCS; i++) {
+        if (proc_table.procs[i].pid == pid) {
+            release(&proc_table.lock);
+            return &proc_table.procs[i];
+        }
+    }
+    release(&proc_table.lock);
+    return 0;
 }

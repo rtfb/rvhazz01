@@ -5,6 +5,7 @@
 #include "fdt.h"
 #include "pagealloc.h"
 #include "uart.h"
+#include "pipe.h"
 
 spinlock init_lock = 0;
 
@@ -29,6 +30,7 @@ void kinit(uintptr_t fdt_header_addr) {
     init_paged_memory(paged_mem_end);
     init_process_table();
     init_global_trap_frame();
+    init_pipes();
     fs_init();
     set_timer_after(KERNEL_SCHEDULER_TICK_TIME);
     enable_interrupts();
