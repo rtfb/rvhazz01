@@ -28,6 +28,8 @@ void *syscall_vector[] _text = {
     [SYS_NR_pinfo]     sys_pinfo,
 };
 
+context_t tmp;
+
 void syscall() {
     int nr = trap_frame.regs[REG_A7];
     trap_frame.pc += 4; // step over the ecall instruction that brought us here

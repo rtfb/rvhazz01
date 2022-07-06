@@ -39,14 +39,21 @@
 typedef struct trap_frame_s {
     regsize_t regs[31]; // all registers except r0
     regsize_t pc;
+    regsize_t kernel_sp;
+    // regsize_t fp;
 } trap_frame_t;
+
+typedef struct context_s {
+    regsize_t regs[14]; // ra, sp, s0..s11
+} context_t;
 
 typedef struct process_s {
     spinlock lock;
     uint32_t pid;
     char *name;
     struct process_s* parent;
-    trap_frame_t context;
+    trap_frame_t context; // TODO: rename context->trap
+    context_t ctx;
 
     // stack_page points to the base of the page allocated for stack (i.e. it's
     // the value returned by allocate_page()). We need to save it so that we
@@ -66,7 +73,16 @@ typedef struct process_s {
     uint64_t wakeup_time;
 
     file_t* files[MAX_PROC_FDS];
+
+    void *kernel_stack; // each process has its own kernel-side stack,
+                        // otherwise syscalls from different processes would
+                        // thrash each other's stack
 } process_t;
+
+typedef struct cpu_s {
+    context_t context;     // swtch() here to enter scheduler()
+    process_t *proc;       // the process running on this cpu, or null
+} cpu_t;
 
 typedef struct proc_table_s {
     spinlock lock;
@@ -90,6 +106,12 @@ typedef struct proc_table_s {
 // defined in proc.c
 extern proc_table_t proc_table;
 
+// we're still single-core, so put it here. Later this needs to become an array
+// of one cpu_t per hart
+//
+// defined in proc.c
+extern cpu_t cpu;
+
 // trap_frame is the piece of memory to hold all user registers when we enter
 // the trap. When the scheduler picks the new process to run, it will save
 // trap_frame in the process_t of the old process and will populate trap_frame
@@ -103,6 +125,9 @@ extern proc_table_t proc_table;
 // registers without trashing any.
 extern trap_frame_t trap_frame;
 
+// defined in swtch.s
+void swtch(context_t *old, context_t *new);
+
 // init_test_processes initializes the process table with a set of userland
 // processes that will get executed by default. Kind of like what an initrd
 // would do, but a poor man's version until we can do better.
@@ -110,7 +135,10 @@ void init_test_processes();
 void assign_init_program(char const* prog);
 
 void init_process_table();
-void schedule_user_process();
+// void schedule_user_process();
+void scheduler();
+void sched();
+void forkret();
 
 // find_ready_proc iterates over the proc table looking for the first available
 // proc that's in a PROC_STATE_READY state. Wraps around and starts from zero
