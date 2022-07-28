@@ -81,8 +81,8 @@ clean_bss_loop:
         bltu    t0, t1, clean_bss_loop
 
 
-        la      t0, trap_frame
-        sx      sp, 32, (t0)
+        la      t0, cpu
+        sx      sp, 15, (t0)
 
         # Now that the memory segments are init'ed, the boot hart will
         # synchronize all other harts: loop from 1 to NUM_HARTS, and for all of
@@ -232,19 +232,8 @@ trap_vector:                            # 3.1.20 Machine Cause Register (mcause)
         csrr    t6, mepc
         sx      t6, 31, (t0)
 
-        # XXX: this seems to be wrong. We need to set sp to something from
-        # trap_frame, not a fixed position
-        # set kernel stack pointer:
-
-        # la      t0, stack_top           # set it at stack_top for hart0,
-        # csrr    t1, mhartid             # at stack_top+512 for hart1, etc.
-        # li      t2, 512
-        # mul     t1, t1, t2
-        # sub     t0, t0, t1
-        # mv      sp, t0
         la t0, cpu
-        lx sp, 1, (t0)
-        # TODO: set sp to myproc()'s kernel_stack.
+        lx sp, 15, (t0)
 
         csrr    t0, mcause
         bgez    t0, exception_dispatch

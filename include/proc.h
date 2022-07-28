@@ -39,7 +39,7 @@
 typedef struct trap_frame_s {
     regsize_t regs[31]; // all registers except r0
     regsize_t pc;
-    regsize_t kernel_sp;
+    // regsize_t kernel_sp;
     // regsize_t fp;
 } trap_frame_t;
 
@@ -60,6 +60,7 @@ typedef struct process_s {
     // can later pass it to release_page(), as well as when copying the entire
     // stack around, e.g. during fork().
     void *stack_page;
+    void *kstack_page;
 
     // state contains the state of the process, as well as the process table
     // slot itself (e.g. signifying the availability of the slot).
@@ -74,6 +75,7 @@ typedef struct process_s {
 
     file_t* files[MAX_PROC_FDS];
 
+    // current sp within kstack_page:
     void *kernel_stack; // each process has its own kernel-side stack,
                         // otherwise syscalls from different processes would
                         // thrash each other's stack
@@ -82,6 +84,7 @@ typedef struct process_s {
 typedef struct cpu_s {
     context_t context;     // swtch() here to enter scheduler()
     process_t *proc;       // the process running on this cpu, or null
+    void *kernel_stack;    // copy of proc->kernel_stack or null
 } cpu_t;
 
 typedef struct proc_table_s {
@@ -204,6 +207,7 @@ process_t* myproc();
 
 // copy_context copies the contents for src into dst.
 void copy_context(trap_frame_t* dst, trap_frame_t* src);
+void copy_context2(context_t *dst, context_t *src);
 
 uint32_t proc_plist(uint32_t *pids, uint32_t size);
 

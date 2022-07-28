@@ -94,11 +94,19 @@ void assign_init_program(char const* prog) {
         return;
     }
     p0->stack_page = sp;
+    void* ksp = allocate_page();
+    if (!ksp) {
+        // TODO: panic
+        return;
+    }
+    p0->kstack_page = ksp;
     p0->context.regs[REG_SP] = (regsize_t)(sp + PAGE_SIZE);
 
     // p0->ctx.regs[REG_RA] = (regsize_t)program->entry_point;
     // p0->ctx.regs[REG_SP] = (regsize_t)(sp + PAGE_SIZE);
-    p0->ctx.regs[REG_SP] = trap_frame.kernel_sp;
+    // p0->ctx.regs[REG_SP] = trap_frame.kernel_sp;
+    p0->ctx.regs[REG_SP] = (regsize_t)(ksp + PAGE_SIZE);
+    p0->kernel_stack = ksp + PAGE_SIZE;
 }
 
 user_program_t* find_user_program(char const *name) {

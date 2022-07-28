@@ -19,10 +19,13 @@ void init_process_table() {
     init_test_processes();
     cpu.proc = 0;
     for (int i = 0; i < 14; i++) {
+        if (i == 1) {
+            continue;
+        }
         cpu.context.regs[i] = 0;
     }
-    unsigned int hart_id = get_mhartid();
-    cpu.context.regs[REG_SP] = (regsize_t)(&stack_top - hart_id*PAGE_SIZE);
+    // unsigned int hart_id = get_mhartid();
+    // cpu.context.regs[REG_SP] = (regsize_t)(&stack_top - hart_id*PAGE_SIZE);
     // cpu.context.regs[REG_FP] = sp;
 }
 
@@ -39,6 +42,7 @@ void scheduler() {
             if (p->state == PROC_STATE_READY) {
                 p->state = PROC_STATE_RUNNING;
                 cpu.proc = p;
+                cpu.kernel_stack = p->kernel_stack;
                 proc_table.curr_proc = i;
                 // switch context into p. This will not return until p itself
                 // does not call swtch().
@@ -46,6 +50,7 @@ void scheduler() {
                 // the process has yielded the cpu, keep looking for something
                 // to run
                 cpu.proc = 0;
+                cpu.kernel_stack = 0;
                 proc_table.curr_proc = -1;
             }
             release(&p->lock);
@@ -167,32 +172,45 @@ uint32_t proc_fork() {
         // TODO: set errno
         return -1;
     }
+    void* ksp = allocate_page();
+    if (!ksp) {
+        // TODO: set errno
+        return -1;
+    }
 
     process_t* parent = myproc();
-    acquire(&parent->lock);
+    // acquire(&parent->lock);
     parent->context.pc = trap_frame.pc;
     copy_context(&parent->context, &trap_frame);
 
     process_t* child = alloc_process();
     if (!child) {
-        release_page(sp);
         release(&parent->lock);
+        release_page(sp);
+        release_page(ksp);
         return -1;
     }
     child->pid = alloc_pid();
     child->parent = parent;
     child->context.pc = parent->context.pc;
     child->stack_page = sp;
+    child->kstack_page = ksp;
     copy_page(child->stack_page, parent->stack_page);
+    copy_page(child->kstack_page, parent->kstack_page);
     copy_context(&child->context, &parent->context);
+    copy_context2(&child->ctx, &parent->ctx);
 
     // overwrite the sp with the same offset as parent->sp, but within the child stack:
     regsize_t offset = parent->context.regs[REG_SP] - (regsize_t)parent->stack_page;
+    regsize_t koffset = parent->context.regs[REG_SP] - (regsize_t)parent->kstack_page;
     child->context.regs[REG_SP] = (regsize_t)(sp + offset);
-    child->ctx.regs[REG_SP] = (regsize_t)(sp + offset);
+    // child->ctx.regs[REG_SP] = (regsize_t)(sp + offset);
+    child->ctx.regs[REG_SP] = (regsize_t)(ksp + koffset);
+    child->kernel_stack = ksp + koffset;
     offset = parent->context.regs[REG_FP] - (regsize_t)parent->stack_page;
     child->context.regs[REG_FP] = (regsize_t)(sp + offset);
-    child->ctx.regs[REG_FP] = (regsize_t)(sp + offset);
+    // child->ctx.regs[REG_FP] = (regsize_t)(sp + offset);
+    child->ctx.regs[REG_FP] = (regsize_t)(ksp + koffset);
     // child's return value should be a 0 pid:
     child->context.regs[REG_A0] = 0;
     release(&parent->lock);
@@ -277,12 +295,21 @@ uint32_t proc_execv(char const* filename, char const* argv[]) {
         // TODO: set errno
         return -1;
     }
+    // void* ksp = allocate_page();
+    // if (!ksp) {
+    //     // TODO: set errno
+    //     return -1;
+    // }
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     proc->context.pc = (regsize_t)program->entry_point;
     proc->name = program->name;
     release_page(proc->stack_page);
+    // release_page(proc->kstack_page);
     proc->stack_page = sp;
+    // proc->kstack_page = ksp;
+    // proc->kernel_stack = ksp + PAGE_SIZE;
+    // proc->ctx.regs[1] = (regsize_t)(ksp + PAGE_SIZE);
     regsize_t argc = len_argv(argv);
     sp_argv_t sp_argv = copy_argv(sp + PAGE_SIZE, argc, argv);
     proc->context.regs[REG_RA] = (regsize_t)proc->context.pc;
@@ -330,7 +357,10 @@ process_t* init_proc(process_t* proc) {
     for (int i = 0; i < MAX_PROC_FDS; i++) {
         proc->files[i] = 0;
     }
-    // TODO: allocate kernel_stack
+    proc->kstack_page = allocate_page();
+    if (!proc->kstack_page) {
+        // TODO: panic
+    }
     proc_table.num_procs++;
     release(&proc_table.lock);
     return proc;
@@ -361,14 +391,21 @@ void copy_context(trap_frame_t* dst, trap_frame_t* src) {
     }
 }
 
+void copy_context2(context_t *dst, context_t *src) {
+    for (int i = 0; i < 14; i++) {
+        dst->regs[i] = src->regs[i];
+    }
+}
+
 void proc_exit() {
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     release_page(proc->stack_page);
-    // TODO: deallocate kernel_stack
+    release_page(proc->kstack_page);
     proc->state = PROC_STATE_AVAILABLE;
     acquire(&proc->parent->lock);
     proc->parent->state = PROC_STATE_READY;
+    copy_context(&trap_frame, &proc->parent->context); // we should return to parent after child exits
     release(&proc->parent->lock);
     release(&proc->lock);
 
@@ -377,11 +414,12 @@ void proc_exit() {
     release(&proc_table.lock);
     // schedule_user_process();
     swtch(&proc->ctx, &cpu.context);
+    // sched();
 }
 
 int32_t wait_or_sleep(uint64_t wakeup_time) {
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     proc->state = PROC_STATE_SLEEPING;
     proc->wakeup_time = wakeup_time;
     copy_context(&proc->context, &trap_frame); // save the context before sleep
@@ -393,9 +431,9 @@ int32_t wait_or_sleep(uint64_t wakeup_time) {
 
 void sched() {
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     swtch(&proc->ctx, &cpu.context);
-    release(&proc->lock);
+    // release(&proc->lock);
 }
 
 int32_t proc_wait() {
@@ -437,7 +475,7 @@ uint32_t proc_pinfo(uint32_t pid, pinfo_t *pinfo) {
     for (int i = 0; i < MAX_PROCS; i++) {
         process_t *proc = &proc_table.procs[i];
         if (proc->pid == pid) {
-            acquire(&proc->lock);
+            acquire(&proc->lock); // TODO: skip self
             pinfo->pid = proc->pid;
             strncpy(pinfo->name, proc->name, 16);
             pinfo->state = proc->state;
@@ -470,7 +508,7 @@ int32_t proc_open(char const *filepath, uint32_t flags) {
         return -1;
     }
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     int32_t fd = fd_alloc(proc, f);
     if (fd < 0) {
         // TODO: set errno to indicate out of proc FDs
@@ -490,7 +528,7 @@ int32_t proc_open(char const *filepath, uint32_t flags) {
 
 int32_t proc_read(uint32_t fd, void *buf, uint32_t size) {
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     file_t *f = proc->files[fd];
     release(&proc->lock);
     if (f == 0) {
@@ -506,7 +544,7 @@ int32_t proc_close(uint32_t fd) {
         return -1;
     }
     process_t* proc = myproc();
-    acquire(&proc->lock);
+    // acquire(&proc->lock);
     // TODO: flush when we have any buffering
     file_t *f = proc->files[fd];
     if (f == 0) {
